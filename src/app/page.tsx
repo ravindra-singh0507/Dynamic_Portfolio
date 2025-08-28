@@ -1,102 +1,237 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import React, { useState, useEffect } from 'react';
+import { Portfolio } from '@/types/portfolio';
+import { portfolioService } from '@/lib/portfolioService';
+import PortfolioSummary from '@/components/PortfolioSummary';
+import PortfolioTable from '@/components/PortfolioTable';
+import SectorSummary from '@/components/SectorSummary';
+import PortfolioCharts from '@/components/PortfolioCharts';
+import { RefreshCw, BarChart3, Table, PieChart } from 'lucide-react';
+
+export default function Dashboard() {
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'table' | 'sectors' | 'charts'>('overview');
+  const [autoRefresh, setAutoRefresh] = useState(true);
+
+  useEffect(() => {
+    initializePortfolio();
+    
+    // Start auto-refresh
+    if (autoRefresh) {
+      portfolioService.startAutoRefresh(15000); // 15 seconds
+    }
+
+    return () => {
+      portfolioService.stopAutoRefresh();
+    };
+  }, [autoRefresh]);
+
+  const initializePortfolio = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Initialize the portfolio service
+      await portfolioService.initializePortfolio();
+      
+      const portfolioData = portfolioService.getPortfolio();
+      setPortfolio(portfolioData);
+    } catch (err) {
+      setError('Failed to load portfolio data');
+      console.error('Error initializing portfolio:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    try {
+      setLoading(true);
+      await portfolioService.refreshData();
+      const portfolioData = portfolioService.getPortfolio();
+      setPortfolio(portfolioData);
+    } catch (err) {
+      setError('Failed to refresh portfolio data');
+      console.error('Error refreshing portfolio:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleAutoRefresh = () => {
+    if (autoRefresh) {
+      portfolioService.stopAutoRefresh();
+    } else {
+      portfolioService.startAutoRefresh(15000);
+    }
+    setAutoRefresh(!autoRefresh);
+  };
+
+  if (loading && !portfolio) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading portfolio data from Excel...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !portfolio) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="bg-red-100 p-4 rounded-lg">
+            <p className="text-red-600 mb-4">{error}</p>
+            <button
+              onClick={initializePortfolio}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!portfolio) {
+    return null;
+  }
+
+  const tabs = [
+    { id: 'overview', name: 'Overview', icon: BarChart3 },
+    { id: 'table', name: 'Portfolio Table', icon: Table },
+    { id: 'sectors', name: 'Sector Breakdown', icon: PieChart },
+    { id: 'charts', name: 'Charts & Analytics', icon: BarChart3 },
+  ];
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center">
+              <h1 className="text-2xl font-bold text-gray-900">Portfolio Dashboard</h1>
+              <span className="ml-3 px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+                Excel Data
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              {/* Auto-refresh toggle */}
+              <button
+                onClick={toggleAutoRefresh}
+                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  autoRefresh 
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <RefreshCw className={`w-4 h-4 ${autoRefresh ? 'animate-spin' : ''}`} />
+                Auto-refresh {autoRefresh ? 'ON' : 'OFF'}
+              </button>
+              
+              {/* Manual refresh */}
+              <button
+                onClick={handleRefresh}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+      {/* Navigation Tabs */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex space-x-8">
+            {tabs.map((tab) => {
+              const IconComponent = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <IconComponent className="w-4 h-4" />
+                  {tab.name}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {loading && (
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
+              <span className="text-blue-600">Updating portfolio data...</span>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-600">{error}</p>
+          </div>
+        )}
+
+        {/* Tab Content */}
+        <div className="space-y-6">
+          {activeTab === 'overview' && (
+            <PortfolioSummary portfolio={portfolio} />
+          )}
+          
+          {activeTab === 'table' && (
+            <PortfolioTable 
+              stocks={portfolio.stocks} 
+              onRefresh={handleRefresh}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          )}
+          
+          {activeTab === 'sectors' && (
+            <SectorSummary sectors={portfolio.sectors} />
+          )}
+          
+          {activeTab === 'charts' && (
+            <PortfolioCharts sectors={portfolio.sectors} />
+          )}
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+      {/* Footer */}
+      <footer className="bg-white border-t border-gray-200 mt-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between text-sm text-gray-500">
+            <div>
+              <p>Portfolio Dashboard - Real-time stock tracking with Excel data</p>
+              <p className="text-xs mt-1">
+                Data updates every 15 seconds • Last updated: {portfolio.lastUpdated.toLocaleString()}
+              </p>
+            </div>
+            <div className="text-xs">
+              <p>Powered by Next.js, TypeScript & Tailwind CSS</p>
+              <p className="mt-1">Data source: portfolio.xlsx</p>
+            </div>
+          </div>
+        </div>
       </footer>
     </div>
   );
